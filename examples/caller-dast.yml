@@ -1,0 +1,34 @@
+# Drop into an app as .github/workflows/agentic-dast.yml
+# Separate from the PR agentic-pipeline — schedule + manual only.
+name: Agentic DAST
+
+on:
+  schedule:
+    # Nightly 02:00 UTC — disable until DAST_TARGET_URL is set and first manual run is clean
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: Override target URL (defaults to vars.DAST_TARGET_URL)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+jobs:
+  dast:
+    if: ${{ vars.DAST_TARGET_URL != '' || inputs.target_url != '' }}
+    uses: pulumamidi-harsha/agentic-dast/.github/workflows/dast.yml@main
+    with:
+      pipeline_repository: pulumamidi-harsha/agentic-dast
+      pipeline_ref: main
+      target_url: ${{ inputs.target_url || vars.DAST_TARGET_URL }}
+      scan_profile: baseline
+    secrets:
+      AI_API_KEY: ${{ secrets.AI_API_KEY }}
+      AI_API_ENDPOINT: ${{ secrets.AI_API_ENDPOINT }}
+      ORG_PAT: ${{ secrets.ORG_PAT }}
+      DAST_AUTH_HEADER_VALUE: ${{ secrets.DAST_AUTH_HEADER_VALUE }}

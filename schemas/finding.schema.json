@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/agentic-dast/schemas/finding.schema.json",
+  "title": "AgenticDastFinding",
+  "description": "Normalized DAST finding (ZAP / Nuclei). Compatible with agentic-quality-gate finding shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["engine", "rule_id", "severity", "category", "message", "in_pr_diff"],
+  "properties": {
+    "engine": { "type": "string", "examples": ["zap", "nuclei"] },
+    "rule_id": { "type": "string", "minLength": 1 },
+    "severity": { "type": "string", "enum": ["error", "warning", "info"] },
+    "category": {
+      "type": "string",
+      "enum": ["security", "secret", "bug", "dependency", "iac", "other"]
+    },
+    "path": { "type": ["string", "null"], "description": "URL or URL path when applicable" },
+    "start_line": { "type": ["integer", "null"] },
+    "end_line": { "type": ["integer", "null"] },
+    "message": { "type": "string", "minLength": 1 },
+    "remediation": { "type": ["string", "null"] },
+    "in_pr_diff": {
+      "type": "boolean",
+      "description": "Always false for scheduled DAST (no PR scope)."
+    },
+    "fingerprint": { "type": ["string", "null"] },
+    "raw": { "type": ["object", "null"] }
+  }
+}
