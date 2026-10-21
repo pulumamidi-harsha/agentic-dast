@@ -10,3 +10,6 @@
 10109	IGNORE	(Modern Web Application) — informational
 10096	IGNORE	(Timestamp Disclosure) — often from CDN
 10027	WARN	(Information Disclosure - Suspicious Comments)
+10035	IGNORE	(Strict-Transport-Security Header Not Set) — may be terminated at edge on Dev
+10055	IGNORE	(CSP) duplicate noise when 10038 already WARN
+10112	IGNORE	(Session Management Response Identified) — informational
