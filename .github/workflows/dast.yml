@@ -20,7 +20,7 @@ on:
         required: true
         type: string
       scan_profile:
-        description: baseline (Phase A) or api (Phase B reserved)
+        description: baseline (fast/passive) | deep (ZAP full + richer Nuclei) | api (alias of deep)
         required: false
         type: string
         default: baseline
@@ -61,7 +61,8 @@ jobs:
   dast:
     name: ZAP + Nuclei + AI triage
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # deep / full-scan needs more wall time than baseline
+    timeout-minutes: 90
     outputs:
       dast_status: ${{ steps.scans.outputs.dast_status }}
       findings_total: ${{ steps.scans.outputs.findings_total }}
@@ -78,7 +79,7 @@ jobs:
           git -C "$PIPELINE_DIR" checkout "$PIPELINE_REF"
           chmod +x "$PIPELINE_DIR"/scripts/*.sh
 
-      - name: Run ZAP baseline + Nuclei
+      - name: Run ZAP + Nuclei
         id: scans
         env:
           TARGET_URL: ${{ inputs.target_url }}

@@ -1,41 +1,48 @@
 # agentic-dast
 
-Isolated hub for **no-budget DAST**: OWASP ZAP (baseline) + ProjectDiscovery Nuclei, then AI triage of scanner evidence.
+Isolated hub for **no-budget DAST** in **GitHub Actions only**: ZAP + ProjectDiscovery Nuclei, then AI triage.
 
-Does **not** run on every PR. Call it on a schedule or `workflow_dispatch` against a live non-prod URL.
+Do **not** run scanners on corp laptops (Netskope / TLS interception). Use Actions → **DAST manual (hub)**.
 
 ## Pipeline role
 
 ```
 PR:     agentic-review → agentic-quality-gate → agentic-verdict   (unchanged)
-DAST:   schedule/manual → agentic-dast (ZAP + Nuclei + AI) → sticky GitHub Issue
+DAST:   schedule/manual (CI) → agentic-dast → sticky GitHub Issue
 ```
 
 ## What it does
 
-1. ZAP baseline (passive) against `target_url`
-2. Nuclei HTTP templates against the same URL
-3. Normalize into `dast-findings.json`
-4. AI triage (MGA / OpenAI-compatible) — ranks evidence only; does not invent vulns
-5. Upload `agentic-dast` artifact + open/update a sticky Issue
-
-## Caller example
-
-See [examples/caller-dast.yml](examples/caller-dast.yml).
-
-Required secrets on the **calling** repo: `AI_API_KEY`, `AI_API_ENDPOINT`.  
-Required variable (or workflow input): `DAST_TARGET_URL` (Dev/staging HTTPS only — never production).
+1. ZAP against `target_url` (`baseline` = passive; `deep` = full/active)
+2. Nuclei templates (broader tags in `deep`)
+3. Deduplicate → `dast-findings.json`
+4. AI triage — short summary + collapsed details on a sticky Issue
+5. Upload `agentic-dast` artifact
 
 ## Scan profiles
 
-| Profile | Behavior |
-|---------|----------|
-| `baseline` | ZAP baseline + Nuclei (Phase A — default) |
-| `api` | Reserved for OpenAPI + auth (Phase B) |
+| Profile | Behavior | Typical use |
+|---------|----------|-------------|
+| `baseline` | ZAP baseline + Nuclei | Nightly / quick |
+| `deep` | ZAP full-scan + richer Nuclei tags | Manual / weekly deep |
+| `api` | Alias of `deep` (OpenAPI import later) | Same as deep |
+
+## How to run (CI)
+
+1. Open https://github.com/pulumamidi-harsha/agentic-dast/actions  
+2. **DAST manual (hub)** → Run workflow  
+3. `target_url` = Dev HTTPS only (never production)  
+4. `scan_profile` = `baseline` or `deep`  
+5. Read the sticky Issue (summary short; expand sections for detail)
+
+Required secrets: `AI_API_KEY`, `AI_API_ENDPOINT`.  
+Optional: `DAST_AUTH_HEADER_VALUE` for authenticated scans.  
+Optional variable: `DAST_TARGET_URL` for scheduled baseline.
 
 ## Non-goals
 
-- No Burp / paid SaaS
-- No PR merge gate
-- No production scanning
+- No local laptop scans  
+- No Burp / paid SaaS  
+- No PR merge gate  
+- No production scanning  
 - Does not replace Semgrep SAST in quality-gate

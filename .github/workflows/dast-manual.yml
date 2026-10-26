@@ -1,22 +1,21 @@
-# Hub-local manual / nightly runner (does not require a caller app).
-# Use this to pilot DAST before the app workflow lands on main.
+# Hub-local runner — GitHub Actions only (do not run scanners on corp laptops).
 name: DAST manual (hub)
 
 on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: Non-prod URL to scan
+        description: Non-prod URL to scan (never production)
         required: true
         type: string
       scan_profile:
-        description: baseline or api
+        description: baseline = fast passive; deep = ZAP full + richer Nuclei
         required: false
         type: choice
-        options: [baseline, api]
+        options: [baseline, deep, api]
         default: baseline
   schedule:
-    # Disabled until TARGET is provided via repo variable on this hub
+    # Nightly baseline when DAST_TARGET_URL repo variable is set
     - cron: "0 3 * * *"
 
 permissions:
@@ -32,6 +31,7 @@ jobs:
       pipeline_repository: ${{ github.repository }}
       pipeline_ref: ${{ github.sha }}
       target_url: ${{ github.event.inputs.target_url || vars.DAST_TARGET_URL }}
+      # Scheduled runs stay on baseline; manual can pick deep
       scan_profile: ${{ github.event.inputs.scan_profile || 'baseline' }}
     secrets:
       AI_API_KEY: ${{ secrets.AI_API_KEY }}

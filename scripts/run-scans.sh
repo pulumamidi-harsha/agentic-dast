@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run ZAP baseline + Nuclei against TARGET_URL; write raw reports under AGENTIC_TMP.
+# Run ZAP + Nuclei against TARGET_URL; write raw reports under AGENTIC_TMP.
+# Profiles: baseline (fast/passive) | deep|api (ZAP full + richer Nuclei). CI only.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=common.sh
@@ -7,6 +8,10 @@ source "${SCRIPT_DIR}/common.sh"
 
 TARGET_URL="${TARGET_URL:?TARGET_URL required}"
 SCAN_PROFILE="${SCAN_PROFILE:-baseline}"
+# api is an alias of deep until OpenAPI import lands
+if [[ "$SCAN_PROFILE" == "api" ]]; then
+  SCAN_PROFILE="deep"
+fi
 PIPELINE_DIR="${PIPELINE_DIR:-$SCRIPT_DIR/..}"
 RULES_TSV="${PIPELINE_DIR}/config/zap-rules.tsv"
 
@@ -16,24 +21,29 @@ mkdir -p "${AGENTIC_TMP}/raw" "${AGENTIC_TMP}/reports"
 agentic_log "═══ DAST scans (profile=${SCAN_PROFILE}) ═══"
 agentic_log "  Target: ${TARGET_URL}"
 
-# Optional auth header for future authenticated scans
-ZAP_AUTH_ARGS=()
 if [[ -n "${DAST_AUTH_HEADER_VALUE:-}" ]]; then
   export ZAP_AUTH_HEADER_VALUE
   export ZAP_AUTH_HEADER="${DAST_AUTH_HEADER:-Authorization}"
   agentic_log "  Auth header configured (${ZAP_AUTH_HEADER})"
 fi
 
-# ── ZAP baseline (Docker) ───────────────────────────────────────────
-agentic_log "→ ZAP baseline"
 ZAP_JSON="${AGENTIC_TMP}/raw/zap-report.json"
 ZAP_HTML="${AGENTIC_TMP}/reports/zap-report.html"
 ZAP_MD="${AGENTIC_TMP}/reports/zap-report.md"
-
-# Copy rules into work dir ZAP can see
 WORK_DIR="${AGENTIC_TMP}/zap-wrk"
 mkdir -p "$WORK_DIR"
 cp "$RULES_TSV" "${WORK_DIR}/zap-rules.tsv" 2>/dev/null || true
+
+# ── ZAP ──────────────────────────────────────────────────────────────
+if [[ "$SCAN_PROFILE" == "deep" ]]; then
+  agentic_log "→ ZAP full scan (deep)"
+  ZAP_CMD=(zap-full-scan.py)
+  ZAP_LOG="${AGENTIC_TMP}/raw/zap-full.log"
+else
+  agentic_log "→ ZAP baseline"
+  ZAP_CMD=(zap-baseline.py)
+  ZAP_LOG="${AGENTIC_TMP}/raw/zap-baseline.log"
+fi
 
 set +e
 docker run --rm \
@@ -42,19 +52,18 @@ docker run --rm \
   -e ZAP_AUTH_HEADER \
   -e ZAP_AUTH_HEADER_SITE \
   ghcr.io/zaproxy/zaproxy:stable \
-  zap-baseline.py \
+  "${ZAP_CMD[@]}" \
   -t "${TARGET_URL}" \
   -J zap-report.json \
   -r zap-report.html \
   -w zap-report.md \
   -c zap-rules.tsv \
   -I \
-  2>&1 | tee "${AGENTIC_TMP}/raw/zap-baseline.log"
+  2>&1 | tee "$ZAP_LOG"
 ZAP_RC=${PIPESTATUS[0]}
 set -e
-agentic_log "  ZAP exit=${ZAP_RC} (baseline may be non-zero when alerts exist)"
+agentic_log "  ZAP exit=${ZAP_RC} (non-zero when alerts exist is expected)"
 
-# Stage reports from work dir
 [[ -f "${WORK_DIR}/zap-report.json" ]] && cp "${WORK_DIR}/zap-report.json" "$ZAP_JSON"
 [[ -f "${WORK_DIR}/zap-report.html" ]] && cp "${WORK_DIR}/zap-report.html" "$ZAP_HTML"
 [[ -f "${WORK_DIR}/zap-report.md" ]] && cp "${WORK_DIR}/zap-report.md" "$ZAP_MD"
@@ -64,15 +73,23 @@ agentic_log "→ Nuclei"
 NUCLEI_OUT="${AGENTIC_TMP}/raw/nuclei.jsonl"
 NUCLEI_WRK="${AGENTIC_TMP}/nuclei-wrk"
 mkdir -p "$NUCLEI_WRK"
+
+NUCLEI_ARGS=(-u "${TARGET_URL}" -jsonl -silent -o /out/nuclei.jsonl)
+if [[ "$SCAN_PROFILE" == "deep" ]]; then
+  # Broader vuln coverage; exclude noisy pure-info DNS/SSL templates via tags
+  NUCLEI_ARGS+=(
+    -severity critical,high,medium,low
+    -tags cve,xss,sqli,ssrf,exposure,misconfig,rce,lfi,redirect,auth-bypass
+  )
+else
+  NUCLEI_ARGS+=(-severity critical,high,medium,low,info)
+fi
+
 set +e
 docker run --rm \
   -v "${NUCLEI_WRK}:/out:rw" \
   projectdiscovery/nuclei:latest \
-  -u "${TARGET_URL}" \
-  -severity critical,high,medium,low,info \
-  -jsonl \
-  -silent \
-  -o /out/nuclei.jsonl \
+  "${NUCLEI_ARGS[@]}" \
   2>"${AGENTIC_TMP}/raw/nuclei.stderr"
 NUCLEI_RC=$?
 set -e
@@ -83,7 +100,7 @@ else
 fi
 agentic_log "  Nuclei exit=${NUCLEI_RC}"
 
-# ── Normalize + merge ────────────────────────────────────────────────
+# ── Normalize + dedupe + merge ───────────────────────────────────────
 agentic_log "→ Normalize findings"
 python3 "${SCRIPT_DIR}/normalize-zap.py" \
   "$ZAP_JSON" \
@@ -94,7 +111,14 @@ python3 "${SCRIPT_DIR}/normalize-nuclei.py" \
   "$NUCLEI_OUT" \
   "${AGENTIC_TMP}/nuclei-findings.json"
 
-jq -s 'add' \
+# Merge then dedupe by fingerprint (or engine+rule_id+path)
+jq -s 'add
+  | group_by(.fingerprint // (.engine + "|" + .rule_id + "|" + (.path // "")))
+  | map(.[0])
+  | sort_by(
+      (if .severity=="error" then 0 elif .severity=="warning" then 1 else 2 end),
+      .rule_id
+    )' \
   "${AGENTIC_TMP}/zap-findings.json" \
   "${AGENTIC_TMP}/nuclei-findings.json" \
   > "${AGENTIC_TMP}/dast-findings.json"
@@ -121,11 +145,12 @@ jq -n \
     status: (if $errors > 0 then "fail" elif $warnings > 0 then "warn" else "pass" end)
   }' > "${AGENTIC_TMP}/dast-result.json"
 
-agentic_log "  Findings: total=${TOTAL} error=${ERRORS} warning=${WARNS} info=${INFOS}"
+agentic_log "  Findings (deduped): total=${TOTAL} error=${ERRORS} warning=${WARNS} info=${INFOS}"
 agentic_log "═══ Done: dast-findings.json · dast-result.json ═══"
 
 write_github_output "findings_total" "$TOTAL"
 write_github_output "findings_error" "$ERRORS"
 write_github_output "findings_warning" "$WARNS"
 write_github_output "dast_status" "$(jq -r '.status' "${AGENTIC_TMP}/dast-result.json")"
+write_github_output "scan_profile" "$SCAN_PROFILE"
 exit 0
