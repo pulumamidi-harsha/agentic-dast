@@ -32,7 +32,10 @@ ZAP_HTML="${AGENTIC_TMP}/reports/zap-report.html"
 ZAP_MD="${AGENTIC_TMP}/reports/zap-report.md"
 WORK_DIR="${AGENTIC_TMP}/zap-wrk"
 mkdir -p "$WORK_DIR"
+# ZAP container user must write reports under the mounted /zap/wrk
+chmod 777 "$WORK_DIR"
 cp "$RULES_TSV" "${WORK_DIR}/zap-rules.tsv" 2>/dev/null || true
+chmod 666 "${WORK_DIR}/zap-rules.tsv" 2>/dev/null || true
 
 # ── ZAP ──────────────────────────────────────────────────────────────
 if [[ "$SCAN_PROFILE" == "deep" ]]; then
