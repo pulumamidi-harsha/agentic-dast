@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>agentic-dast</title>
+<link rel="stylesheet" href="diagram.css">
+</head>
+<body>
+<div class="canvas">
+  <div class="lane rt">
+    <div class="lane-title">agentic-dast · a running non-prod app, not the pull request</div>
+    <div class="row" style="grid-template-columns: 1fr 52px 1fr 52px 1fr 52px 1fr">
+      <div class="box target">
+        <h3>Non-prod URL</h3>
+        <p>Dev or test only. Never production.</p>
+      </div>
+      <div class="arrow"><svg viewBox="0 0 40 20"><path d="M0 10h32M24 2l10 8-10 8" fill="none" stroke="#5a6b77" stroke-width="3"/></svg></div>
+      <div class="box hub scan">
+        <h3>ZAP and Nuclei</h3>
+        <p>baseline for a quick scan, deep for a full one</p>
+      </div>
+      <div class="arrow"><svg viewBox="0 0 40 20"><path d="M0 10h32M24 2l10 8-10 8" fill="none" stroke="#0091df" stroke-width="3"/></svg></div>
+      <div class="box hub scan">
+        <div class="num">AI</div>
+        <h3>Short summary</h3>
+        <p>Deduped findings, written for a person</p>
+      </div>
+      <div class="arrow"><svg viewBox="0 0 40 20"><path d="M0 10h32M24 2l10 8-10 8" fill="none" stroke="#de0043" stroke-width="3"/></svg></div>
+      <div class="box result">
+        <h3>GitHub Issue</h3>
+        <p>Summary on top, details folded underneath</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

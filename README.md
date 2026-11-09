@@ -6,12 +6,7 @@ One of four hubs, and separate from the pull request. The full picture is the [A
 
 ## What this repo does
 
-```mermaid
-flowchart LR
-    url[Non-prod URL] --> scan[ZAP and Nuclei]
-    scan --> ai[AI writes a short summary]
-    ai --> issue[One GitHub Issue<br/>details collapsed underneath]
-```
+![What agentic-dast does](docs/flow.png)
 
 It does not run on a laptop, it does not scan production, and it does not block a merge.
 
