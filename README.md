@@ -1,84 +1,31 @@
 # agentic-dast
 
-Isolated hub for **open-source DAST** in **GitHub Actions only**: ZAP + ProjectDiscovery Nuclei, then AI triage.
+Scans a running app for vulnerabilities and files one GitHub Issue. GitHub Actions only. Open-source scanners: OWASP ZAP and Nuclei, then a short AI summary.
 
-Do **not** run scanners on corp laptops (Netskope / TLS interception). Use Actions → **DAST manual (hub)**.
+One of four hubs, and separate from the pull request. The full picture is the [Agentic AppSec overview](https://github.com/bayer-int/agentic-review#readme).
 
-## Part of the Agentic AppSec platform
-
-This repo is one of four hubs that together give Bayer teams agentic SAST and DAST checks: open-source scanners, with findings explained and prioritized by AI. For the problem statement, the full architecture diagram and the end-to-end PR flow, see **[Platform overview in agentic-review](https://github.com/bayer-int/agentic-review#platform-overview)**.
+## What this repo does
 
 ```mermaid
 flowchart LR
-    LOCAL["Developer machine<br/>run-qg · chat · pre-push"]
-    subgraph PRF["Pull request — GitHub Actions"]
-        direction LR
-        R["1 · agentic-review<br/>AI Pass 1"] --> Q["2 · agentic-quality-gate<br/>Sonar-style gate"] --> V["3 · agentic-verdict<br/>AI Pass 2"]
-    end
-    URL[("Non-prod URL")] --> D["4 · agentic-dast<br/>ZAP · Nuclei · AI triage"]
-    LOCAL -. "same engines and rules" .-> Q
-
-    classDef hub fill:#10384f,stroke:#0091df,stroke-width:2px,color:#ffffff
-    classDef here fill:#de0043,stroke:#10384f,stroke-width:3px,color:#ffffff
-    classDef dev fill:#e7f8ff,stroke:#0091df,stroke-width:2px,color:#10384f
-    classDef env fill:#f5f5f5,stroke:#737373,color:#10384f
-    class R,Q,V,D hub
-    class D here
-    class LOCAL dev
-    class URL env
-    style PRF fill:#f4fbff,stroke:#10384f,color:#10384f
+    url[Non-prod URL] --> scan[ZAP and Nuclei]
+    scan --> ai[AI writes a short summary]
+    ai --> issue[One GitHub Issue<br/>details collapsed underneath]
 ```
 
-<sub>Highlighted in pink: this repo.</sub>
+It does not run on a laptop, it does not scan production, and it does not block a merge.
 
-| # | Hub | Role |
-|:-:|:----|:-----|
-| 1 | [agentic-review](https://github.com/bayer-int/agentic-review#readme) | AI Pass 1: detects the stack, runs lint / test / build, dependency audit, secret and IaC scans |
-| 2 | [agentic-quality-gate](https://github.com/bayer-int/agentic-quality-gate#readme) | Sonar-style gate: security hotspots, secrets, duplication, complexity, coverage. Also runs locally as `run-qg` |
-| 3 | [agentic-verdict](https://github.com/bayer-int/agentic-verdict#readme) | AI Pass 2: weighs all evidence, posts the final PR review, approve / request changes, label |
-| 4 | **agentic-dast** (this repo) | Runtime scans of a live non-prod URL (OWASP ZAP + Nuclei) with AI triage into a sticky Issue |
+## How to run it
 
----
+1. Open the **DAST manual** workflow in Actions and run it.
+2. `target_url` is a dev or test HTTPS URL.
+3. `scan_profile` is `baseline` for a quick passive scan, or `deep` for a full active scan.
+4. Read the Issue. The summary is short. Expand a section for the detail.
 
-## Pipeline role
+| Profile | What it does |
+|:--------|:-------------|
+| `baseline` | Passive ZAP plus Nuclei. Good for a nightly run |
+| `deep` | Full ZAP scan plus a wider Nuclei set |
+| `api` | Same as `deep` today |
 
-```
-PR:     agentic-review → agentic-quality-gate → agentic-verdict   (unchanged)
-DAST:   schedule/manual (CI) → agentic-dast → sticky GitHub Issue
-```
-
-## What it does
-
-1. ZAP against `target_url` (`baseline` = passive; `deep` = full/active)
-2. Nuclei templates (broader tags in `deep`)
-3. Deduplicate → `dast-findings.json`
-4. AI triage — short summary + collapsed details on a sticky Issue
-5. Upload `agentic-dast` artifact
-
-## Scan profiles
-
-| Profile | Behavior | Typical use |
-|---------|----------|-------------|
-| `baseline` | ZAP baseline + Nuclei | Nightly / quick |
-| `deep` | ZAP full-scan + richer Nuclei tags | Manual / weekly deep |
-| `api` | Alias of `deep` (OpenAPI import later) | Same as deep |
-
-## How to run (CI)
-
-1. Open https://github.com/pulumamidi-harsha/agentic-dast/actions  
-2. **DAST manual (hub)** → Run workflow  
-3. `target_url` = Dev HTTPS only (never production)  
-4. `scan_profile` = `baseline` or `deep`  
-5. Read the sticky Issue (summary short; expand sections for detail)
-
-Required secrets: `AI_API_KEY`, `AI_API_ENDPOINT`.  
-Optional: `DAST_AUTH_HEADER_VALUE` for authenticated scans.  
-Optional variable: `DAST_TARGET_URL` for scheduled baseline.
-
-## Non-goals
-
-- No local laptop scans  
-- No Burp / paid SaaS  
-- No PR merge gate  
-- No production scanning  
-- Does not replace Semgrep SAST in quality-gate
+Secrets: `AI_API_KEY` and `AI_API_ENDPOINT`. Add `DAST_AUTH_HEADER_VALUE` when the app needs a logged-in session. Set the `DAST_TARGET_URL` variable to run `baseline` on a schedule.
